@@ -1,0 +1,44 @@
+body {
+  font-family: Arial, sans-serif;
+  padding: 20px;
+  text-align: center;
+}
+
+#board {
+  margin: 20px auto;
+  display: grid;
+  grid-template-columns: repeat(30, 20px);
+  grid-template-rows: repeat(30, 20px);
+  gap: 1px;
+  width: max-content;
+  border: 2px solid #333;
+  user-select: none;
+}
+
+.cell {
+  width: 20px;
+  height: 20px;
+  background: #f0f0f0;
+  border: 1px solid #ccc;
+  cursor: pointer;
+  line-height: 20px;
+  font-weight: bold;
+  font-size: 16px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.cell.X {
+  color: blue;
+}
+
+.cell.O {
+  color: red;
+}
+
+#message {
+  margin-top: 20px;
+  color: red;
+  font-weight: bold;
+}

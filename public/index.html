@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cờ Caro 30x30</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 10px; }
+    #board { display: grid; grid-template-columns: repeat(30, 20px); grid-template-rows: repeat(30, 20px); gap: 1px; margin-top: 10px; }
+    .cell { width: 20px; height: 20px; background: #f0f0f0; text-align: center; line-height: 20px; cursor: pointer; font-weight: bold; font-size: 16px; user-select: none; }
+    .cell.X { color: blue; }
+    .cell.O { color: red; }
+    button { margin: 5px; padding: 10px 15px; }
+    #message { margin-top: 10px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h2>Cờ Caro 30x30</h2>
+
+  <button id="btnCreateSingle">Tạo phòng (1 người chơi)</button>
+  <button id="btnCreateMulti">Tạo phòng (2 người chơi)</button>
+  <br />
+  <input type="text" id="inputRoomId" placeholder="Nhập mã phòng 6 số" maxlength="6" />
+  <button id="btnJoinRoom">Tham gia phòng</button>
+
+  <div id="message"></div>
+  <div id="turnDisplay"></div>
+  <div id="board"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
