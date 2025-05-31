@@ -1,31 +1,22 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Cờ Caro 30x30</title>
-  <style>
-    body { font-family: Arial, sans-serif; padding: 10px; }
-    #board { display: grid; grid-template-columns: repeat(30, 20px); grid-template-rows: repeat(30, 20px); gap: 1px; margin-top: 10px; }
-    .cell { width: 20px; height: 20px; background: #f0f0f0; text-align: center; line-height: 20px; cursor: pointer; font-weight: bold; font-size: 16px; user-select: none; }
-    .cell.X { color: blue; }
-    .cell.O { color: red; }
-    button { margin: 5px; padding: 10px 15px; }
-    #message { margin-top: 10px; font-weight: bold; }
-  </style>
+  <title>Cờ Caro Online</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <h2>Cờ Caro 30x30</h2>
+  <h1>Cờ Caro 30x30</h1>
 
-  <button id="btnCreateSingle">Tạo phòng (1 người chơi)</button>
-  <button id="btnCreateMulti">Tạo phòng (2 người chơi)</button>
-  <br />
-  <input type="text" id="inputRoomId" placeholder="Nhập mã phòng 6 số" maxlength="6" />
-  <button id="btnJoinRoom">Tham gia phòng</button>
+  <div class="menu">
+    <button id="playAloneBtn">Chơi một mình</button>
+    <input type="text" id="roomId" placeholder="Nhập mã phòng (6 số)" maxlength="6" />
+    <button id="createRoomBtn">Tạo phòng</button>
+    <button id="joinRoomBtn">Tham gia phòng</button>
+  </div>
 
-  <div id="message"></div>
-  <div id="turnDisplay"></div>
-  <div id="board"></div>
+  <div id="gameBoard"></div>
+  <p id="status"></p>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="script.js"></script>

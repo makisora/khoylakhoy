@@ -1,132 +1,115 @@
-const express = require('express');
+// ------------------- index.js (SERVER) -------------------
+const express = require("express");
 const app = express();
-const http = require('http').createServer(app);
-const io = require('socket.io')(http);
+const http = require("http").createServer(app);
+const io = require("socket.io")(http);
+const path = require("path");
 
-const PORT = process.env.PORT || 3000;
-const BOARD_SIZE = 30;
+// Serve static files from /public folder
+app.use(express.static(path.join(__dirname, "public")));
 
-app.use(express.static('public'));
+const rooms = {}; // Structure: { roomId: { players: [socketId, socketId], board: [], turn: 0 } }
 
-const rooms = {};
+// Helper to create empty board
+const createBoard = () => Array.from({ length: 30 }, () => Array(30).fill(""));
 
-function createEmptyBoard() {
-  return Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(''));
-}
-
-function generateRoomId() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
-
-function checkWin(board, row, col, mark) {
+// Check win
+function checkWin(board, x, y, symbol) {
   const directions = [
-    [0,1], [1,0], [1,1], [1,-1]
+    [1, 0], // Horizontal
+    [0, 1], // Vertical
+    [1, 1], // Diagonal down-right
+    [1, -1], // Diagonal up-right
   ];
 
-  for (const [dx, dy] of directions) {
+  for (let [dx, dy] of directions) {
     let count = 1;
-    let x = row + dx, y = col + dy;
-    while (x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE && board[x][y] === mark) {
-      count++; x += dx; y += dy;
+
+    for (let dir of [-1, 1]) {
+      let i = 1;
+      while (true) {
+        const nx = x + dx * i * dir;
+        const ny = y + dy * i * dir;
+        if (nx < 0 || ny < 0 || nx >= 30 || ny >= 30 || board[nx][ny] !== symbol) break;
+        count++;
+        i++;
+      }
     }
-    x = row - dx; y = col - dy;
-    while (x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE && board[x][y] === mark) {
-      count++; x -= dx; y -= dy;
-    }
+
     if (count >= 5) return true;
   }
   return false;
 }
 
-io.on('connection', socket => {
-  console.log('User connected:', socket.id);
+io.on("connection", (socket) => {
+  console.log("✅ Connected:", socket.id);
 
-  socket.on('create_room', ({mode}) => {
-    let roomId;
-    do {
-      roomId = generateRoomId();
-    } while (rooms[roomId]);
-
-    rooms[roomId] = {
-      board: createEmptyBoard(),
-      mode,  // 'single' or 'multi'
-      players: [socket.id],
-      turn: 'X',
-      winner: null,
-    };
-    socket.join(roomId);
-    socket.emit('room_created', {roomId});
-    io.to(roomId).emit('game_update', {board: rooms[roomId].board, turn: 'X'});
+  socket.on("playAlone", () => {
+    socket.emit("startSinglePlayer");
   });
 
-  socket.on('join_room', ({roomId}) => {
-    const room = rooms[roomId];
-    if (!room) {
-      socket.emit('error_message', 'Phòng không tồn tại');
-      return;
-    }
-    if (room.mode === 'multi' && room.players.length >= 2) {
-      socket.emit('error_message', 'Phòng đã đầy');
-      return;
-    }
-    socket.join(roomId);
-    if (!room.players.includes(socket.id)) {
-      room.players.push(socket.id);
-    }
-    io.to(roomId).emit('game_update', {board: room.board, turn: room.turn});
-  });
-
-  socket.on('make_move', ({roomId, row, col}) => {
-    const room = rooms[roomId];
-    if (!room) return;
-    if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) return;
-    if (room.board[row][col] !== '') return;
-    if (room.winner) return;  // game đã kết thúc
-
-    let mark;
-    if (room.mode === 'multi') {
-      // Kiểm tra lượt người chơi
-      const playerIndex = room.players.indexOf(socket.id);
-      if (playerIndex === -1) return;
-      mark = playerIndex === 0 ? 'X' : 'O';
-      if (mark !== room.turn) return; // chưa đến lượt
+  socket.on("createRoom", (roomId) => {
+    if (!rooms[roomId]) {
+      rooms[roomId] = {
+        players: [socket.id],
+        board: createBoard(),
+        turn: 0,
+      };
+      socket.join(roomId);
+      socket.emit("roomJoined", { symbol: "X", roomId });
     } else {
-      // chế độ 1 người: tự đánh X rồi O
-      mark = room.turn;
+      socket.emit("roomExists");
     }
-
-    room.board[row][col] = mark;
-
-    // Kiểm tra thắng
-    if (checkWin(room.board, row, col, mark)) {
-      room.winner = mark;
-      io.to(roomId).emit('game_over', {winner: mark});
-      io.to(roomId).emit('game_update', {board: room.board, turn: null});
-      return;
-    }
-
-    // Chuyển lượt
-    room.turn = room.turn === 'X' ? 'O' : 'X';
-
-    io.to(roomId).emit('game_update', {board: room.board, turn: room.turn});
   });
 
-  socket.on('disconnecting', () => {
-    // Xử lý khi người chơi rời phòng
-    const roomsJoined = Array.from(socket.rooms).filter(r => r !== socket.id);
-    roomsJoined.forEach(roomId => {
+  socket.on("joinRoom", (roomId) => {
+    const room = rooms[roomId];
+    if (room && room.players.length === 1) {
+      room.players.push(socket.id);
+      socket.join(roomId);
+      socket.emit("roomJoined", { symbol: "O", roomId });
+      io.to(roomId).emit("startGame");
+    } else {
+      socket.emit("roomFullOrInvalid");
+    }
+  });
+
+  socket.on("makeMove", ({ roomId, x, y }) => {
+    const room = rooms[roomId];
+    if (!room || room.players.length < 2) return;
+
+    const currentPlayer = room.players[room.turn % 2];
+    if (socket.id !== currentPlayer) return;
+
+    if (room.board[x][y] !== "") return; // Ô đã đánh
+
+    const symbol = room.turn % 2 === 0 ? "X" : "O";
+    room.board[x][y] = symbol;
+    io.to(roomId).emit("moveMade", { x, y, symbol });
+
+    if (checkWin(room.board, x, y, symbol)) {
+      io.to(roomId).emit("gameOver", symbol);
+      delete rooms[roomId];
+    } else {
+      room.turn++;
+    }
+  });
+
+  socket.on("disconnect", () => {
+    for (const roomId in rooms) {
       const room = rooms[roomId];
-      if (room) {
-        room.players = room.players.filter(p => p !== socket.id);
-        // Nếu phòng trống thì xóa luôn
-        if (room.players.length === 0) {
-          delete rooms[roomId];
-        }
+      const index = room.players.indexOf(socket.id);
+      if (index !== -1) {
+        room.players.splice(index, 1);
+        io.to(roomId).emit("playerLeft");
+        if (room.players.length === 0) delete rooms[roomId];
       }
-    });
+    }
+    console.log("❌ Disconnected:", socket.id);
   });
 });
 
+const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => {
-  console.log(`Server chạy tại http://localhost:${PORT}`);
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
 });
