@@ -1,106 +1,168 @@
 const socket = io();
 
-const boardDiv = document.getElementById('board');
-const messageDiv = document.getElementById('message');
-const turnDisplay = document.getElementById('turnDisplay');
-const inputRoomId = document.getElementById('inputRoomId');
+const boardSize = 30;
+const winLength = 5;
 
-let roomId = null;
 let board = [];
-let currentTurn = null;
-const BOARD_SIZE = 30;
+let currentPlayer = 'X';
+let gameMode = null; // "single" or "online"
+let isMyTurn = false;
+let roomId = null;
 
-function createBoardUI() {
-  boardDiv.innerHTML = '';
-  boardDiv.style.gridTemplateColumns = `repeat(${BOARD_SIZE}, 20px)`;
-  boardDiv.style.gridTemplateRows = `repeat(${BOARD_SIZE}, 20px)`;
+const boardEl = document.getElementById('board');
+const statusEl = document.getElementById('status');
+const btnSingle = document.getElementById('btn-single');
+const btnCreateRoom = document.getElementById('btn-create-room');
+const btnJoinRoom = document.getElementById('btn-join-room');
+const roomInput = document.getElementById('room-input');
 
-  for(let i = 0; i < BOARD_SIZE; i++) {
-    for(let j = 0; j < BOARD_SIZE; j++) {
+// Tạo bàn cờ trắng trống
+function initBoard() {
+  board = Array(boardSize).fill(null).map(() => Array(boardSize).fill(''));
+  boardEl.innerHTML = '';
+  for (let r = 0; r < boardSize; r++) {
+    for (let c = 0; c < boardSize; c++) {
       const cell = document.createElement('div');
       cell.classList.add('cell');
-      cell.dataset.row = i;
-      cell.dataset.col = j;
-      cell.addEventListener('click', () => {
-        if (!roomId) {
-          showMessage('Bạn chưa tham gia hoặc tạo phòng');
-          return;
-        }
-        if (!currentTurn) {
-          showMessage('Trò chơi đã kết thúc hoặc chưa bắt đầu');
-          return;
-        }
-        if (board[i][j] !== '') return;
-        socket.emit('make_move', {roomId, row: i, col: j});
-      });
-      boardDiv.appendChild(cell);
+      cell.dataset.row = r;
+      cell.dataset.col = c;
+      cell.addEventListener('click', onCellClick);
+      boardEl.appendChild(cell);
     }
   }
 }
 
-function updateBoardUI() {
-  for(let i = 0; i < BOARD_SIZE; i++) {
-    for(let j = 0; j < BOARD_SIZE; j++) {
-      const idx = i * BOARD_SIZE + j;
-      const cell = boardDiv.children[idx];
-      cell.textContent = board[i][j];
-      cell.classList.remove('X','O');
-      if (board[i][j] === 'X') cell.classList.add('X');
-      else if (board[i][j] === 'O') cell.classList.add('O');
+function setStatus(text) {
+  statusEl.textContent = text;
+}
+
+// Kiểm tra thắng
+function checkWin(r, c, player) {
+  const directions = [
+    [0,1], [1,0], [1,1], [1,-1]
+  ];
+  for (const [dr, dc] of directions) {
+    let count = 1;
+    // Đếm về phía dương
+    for (let i = 1; i < winLength; i++) {
+      const nr = r + dr*i, nc = c + dc*i;
+      if (nr < 0 || nr >= boardSize || nc < 0 || nc >= boardSize) break;
+      if (board[nr][nc] === player) count++;
+      else break;
     }
+    // Đếm về phía âm
+    for (let i = 1; i < winLength; i++) {
+      const nr = r - dr*i, nc = c - dc*i;
+      if (nr < 0 || nr >= boardSize || nc < 0 || nc >= boardSize) break;
+      if (board[nr][nc] === player) count++;
+      else break;
+    }
+    if (count >= winLength) return true;
   }
-  if (currentTurn) {
-    turnDisplay.textContent = `Lượt đi: Quân ${currentTurn}`;
-  } else {
-    turnDisplay.textContent = 'Trò chơi kết thúc.';
+  return false;
+}
+
+// Cập nhật ô
+function updateCell(r, c, player) {
+  board[r][c] = player;
+  const cells = boardEl.querySelectorAll('.cell');
+  const index = r * boardSize + c;
+  const cell = cells[index];
+  cell.textContent = player;
+  cell.classList.add(player);
+  cell.style.cursor = 'default';
+  cell.removeEventListener('click', onCellClick);
+}
+
+// Xử lý click ô
+function onCellClick(e) {
+  if (!isMyTurn) return;
+  const r = +e.target.dataset.row;
+  const c = +e.target.dataset.col;
+  if (board[r][c] !== '') return;
+
+  if (gameMode === 'single') {
+    // 1 người đi cả X và O tự đối đầu
+    updateCell(r, c, currentPlayer);
+    if (checkWin(r, c, currentPlayer)) {
+      setStatus(`Quân ${currentPlayer} thắng!`);
+      isMyTurn = false;
+      return;
+    }
+    currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+    setStatus(`Lượt của quân ${currentPlayer}`);
+  } else if (gameMode === 'online') {
+    if (!isMyTurn) return;
+    socket.emit('play', { roomId, r, c });
   }
 }
 
-function showMessage(msg) {
-  messageDiv.textContent = msg;
-}
+// Khởi động chế độ 1 người
+btnSingle.onclick = () => {
+  gameMode = 'single';
+  currentPlayer = 'X';
+  isMyTurn = true;
+  roomId = null;
+  initBoard();
+  setStatus('Chơi 1 người: Lượt của quân X');
+};
 
-document.getElementById('btnCreateSingle').addEventListener('click', () => {
-  socket.emit('create_room', {mode: 'single'});
-  showMessage('Đang tạo phòng 1 người chơi...');
-});
+// Tạo phòng
+btnCreateRoom.onclick = () => {
+  socket.emit('createRoom');
+};
 
-document.getElementById('btnCreateMulti').addEventListener('click', () => {
-  socket.emit('create_room', {mode: 'multi'});
-  showMessage('Đang tạo phòng 2 người chơi...');
-});
-
-document.getElementById('btnJoinRoom').addEventListener('click', () => {
-  const r = inputRoomId.value.trim();
-  if (r.length !== 6 || isNaN(Number(r))) {
-    showMessage('Mã phòng phải là 6 chữ số.');
+// Tham gia phòng
+btnJoinRoom.onclick = () => {
+  const id = roomInput.value.trim();
+  if (!/^\d{6}$/.test(id)) {
+    alert('Mã phòng phải gồm 6 chữ số!');
     return;
   }
-  socket.emit('join_room', {roomId: r});
-  showMessage('Đang tham gia phòng...');
+  socket.emit('joinRoom', id);
+};
+
+// Xử lý sự kiện từ server
+
+socket.on('roomCreated', (id) => {
+  gameMode = 'online';
+  roomId = id;
+  currentPlayer = 'X';
+  isMyTurn = true;
+  initBoard();
+  setStatus(`Đã tạo phòng: ${id}. Bạn là quân X, lượt của bạn.`);
 });
 
-socket.on('room_created', ({roomId: rId}) => {
-  roomId = rId;
-  showMessage(`Phòng đã tạo: ${roomId}`);
-  board = Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(''));
-  createBoardUI();
-  updateBoardUI();
+socket.on('roomJoined', (id) => {
+  gameMode = 'online';
+  roomId = id;
+  currentPlayer = 'O';
+  isMyTurn = false;
+  initBoard();
+  setStatus(`Đã vào phòng: ${id}. Bạn là quân O, chờ lượt của đối thủ.`);
 });
 
-socket.on('game_update', ({board: newBoard, turn}) => {
-  board = newBoard;
-  currentTurn = turn;
-  updateBoardUI();
+socket.on('playMade', ({r, c, player}) => {
+  updateCell(r, c, player);
+  if (checkWin(r, c, player)) {
+    setStatus(`Quân ${player} thắng!`);
+    isMyTurn = false;
+    return;
+  }
+  if (player !== currentPlayer) {
+    isMyTurn = true;
+    setStatus(`Lượt của bạn (${currentPlayer})`);
+  } else {
+    isMyTurn = false;
+    setStatus(`Lượt đối thủ (${player === 'X' ? 'O' : 'X'})`);
+  }
 });
 
-socket.on('game_over', ({winner}) => {
-  updateBoardUI();
-  showMessage(`Quân ${winner} đã thắng!`);
-  currentTurn = null;
-  turnDisplay.textContent = `Game kết thúc - Quân ${winner} thắng!`;
+socket.on('errorMsg', (msg) => {
+  alert(msg);
 });
 
-socket.on('error_message', (msg) => {
-  showMessage(msg);
+socket.on('opponentLeft', () => {
+  setStatus('Đối thủ đã rời phòng. Bạn thắng!');
+  isMyTurn = false;
 });
