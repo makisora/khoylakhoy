@@ -44,54 +44,48 @@ function checkWin(board, x, y, symbol) {
 io.on("connection", (socket) => {
   console.log("✅ Connected:", socket.id);
 
-  socket.on("playAlone", () => {
-    socket.emit("startSinglePlayer");
+  socket.on("create_room", ({mode}) => {
+    const roomId = Math.floor(100000 + Math.random() * 900000).toString();
+    rooms[roomId] = {
+      players: [socket.id],
+      board: createBoard(),
+      turn: 'X',
+      mode: mode
+    };
+    socket.join(roomId);
+    socket.emit("room_created", { roomId });
+    socket.emit("game_update", { board: rooms[roomId].board, turn: rooms[roomId].turn });
   });
 
-  socket.on("createRoom", (roomId) => {
-    if (!rooms[roomId]) {
-      rooms[roomId] = {
-        players: [socket.id],
-        board: createBoard(),
-        turn: 0,
-      };
-      socket.join(roomId);
-      socket.emit("roomJoined", { symbol: "X", roomId });
-    } else {
-      socket.emit("roomExists");
-    }
-  });
-
-  socket.on("joinRoom", (roomId) => {
+  socket.on("join_room", ({roomId}) => {
     const room = rooms[roomId];
     if (room && room.players.length === 1) {
       room.players.push(socket.id);
       socket.join(roomId);
-      socket.emit("roomJoined", { symbol: "O", roomId });
-      io.to(roomId).emit("startGame");
+      io.to(roomId).emit("game_update", { board: room.board, turn: room.turn });
     } else {
-      socket.emit("roomFullOrInvalid");
+      socket.emit("error_message", "Phòng không tồn tại hoặc đã đầy");
     }
   });
 
-  socket.on("makeMove", ({ roomId, x, y }) => {
+  socket.on("make_move", ({ roomId, row, col }) => {
     const room = rooms[roomId];
-    if (!room || room.players.length < 2) return;
+    if (!room) return;
 
-    const currentPlayer = room.players[room.turn % 2];
-    if (socket.id !== currentPlayer) return;
+    // For single player mode, allow any move
+    if (room.mode === 'single' || (room.players.length === 2 && room.players.includes(socket.id))) {
+      if (room.board[row][col] !== "") return; // Cell already taken
 
-    if (room.board[x][y] !== "") return; // Ô đã đánh
+      const symbol = room.turn;
+      room.board[row][col] = symbol;
 
-    const symbol = room.turn % 2 === 0 ? "X" : "O";
-    room.board[x][y] = symbol;
-    io.to(roomId).emit("moveMade", { x, y, symbol });
-
-    if (checkWin(room.board, x, y, symbol)) {
-      io.to(roomId).emit("gameOver", symbol);
-      delete rooms[roomId];
-    } else {
-      room.turn++;
+      if (checkWin(room.board, row, col, symbol)) {
+        io.to(roomId).emit("game_over", { winner: symbol });
+        delete rooms[roomId];
+      } else {
+        room.turn = room.turn === 'X' ? 'O' : 'X';
+        io.to(roomId).emit("game_update", { board: room.board, turn: room.turn });
+      }
     }
   });
 

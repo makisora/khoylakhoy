@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -9,14 +10,15 @@
   <h1>Cờ Caro 30x30</h1>
 
   <div class="menu">
-    <button id="playAloneBtn">Chơi một mình</button>
-    <input type="text" id="roomId" placeholder="Nhập mã phòng (6 số)" maxlength="6" />
-    <button id="createRoomBtn">Tạo phòng</button>
-    <button id="joinRoomBtn">Tham gia phòng</button>
+    <button id="btnCreateSingle">Chơi một mình</button>
+    <button id="btnCreateMulti">Tạo phòng 2 người</button>
+    <input type="text" id="inputRoomId" placeholder="Nhập mã phòng (6 số)" maxlength="6" />
+    <button id="btnJoinRoom">Tham gia phòng</button>
   </div>
 
-  <div id="gameBoard"></div>
-  <p id="status"></p>
+  <div id="board"></div>
+  <div id="turnDisplay"></div>
+  <div id="message"></div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="script.js"></script>
